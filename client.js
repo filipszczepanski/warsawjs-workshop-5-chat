@@ -5,23 +5,27 @@ var os = require('os');
 
 var user = {name:'anonymous', hash:null};
 
-socket.emit('userName', 'Filip Client');
-
 socket.on('hello', message => {
   writeLine(message);
 });
 
-socket.on('message', msg => {
+socket.on('message', ({userName, messageLine}) => {
+  const usrMsg = `${userName}: ${messageLine}`;
+  writeLine(usrMsg);
+});
+
+socket.on('registerResult', msg => {
+  writeLine(msg);
+});
+
+socket.on('logoutResult', msg => {
   writeLine(msg);
 });
 
 socket.on('logedin', ({name, hash}) => {
   user.name = name;
   user.hash = hash;
-  writeLine(`You are loged in!`);
 });
-
-
 
 function writeLine(messageLine) {
   process.stdout.clearLine();
@@ -40,5 +44,5 @@ cli.prompt();
 
 cli.on('line', messageLine => {
   writeLine(messageLine);
-  socket.emit('messageLine', {messageLine, hash: user.hash});
+  socket.emit('messageLine', {messageLine, userName: user.name, hash: user.hash});
 })
