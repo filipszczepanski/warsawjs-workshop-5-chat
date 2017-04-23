@@ -6,6 +6,24 @@ const io = require('socket.io');
 const uuidV1 = require('uuid/v1');
 
 
+class HttpServer {
+  constructor(http, port = 3001) {
+    this.http = http;
+    this.port = port;
+    this.server = this.createHttpServer();
+  }
+  createHttpServer() {
+    return new Promise((resolve, reject) => {
+        var server = this.http.createServer();
+        server.on('listening', () => resolve(server));
+        server.on('error', (error)=> {
+          console.log(reject);
+        });
+        server.listen(this.port);
+    });
+  }
+}
+
 class ChatServer {
   constructor(http, io) {
     this.http = http;
@@ -13,91 +31,104 @@ class ChatServer {
     this.users = [];
   }
   createServer() {
-      return new Promise((resolve, reject) => {
-          var server = this.http.createServer();
-          server.on('listening', () => resolve(server));
-          server.on('error', (error)=> {
-            console.log(reject);
-          });
-          server.listen(3001);
-      });
+    const httpServer = new HttpServer(http, 3001);
+    return httpServer.server;
   }
   runServer() {
     var createServer = this.createServer();
     createServer.then((server) => {
-        console.log('Server started!');
-        var socketio = io(server);
-        socketio.on('connection', socket => {
+      console.log('Server started!');
+      var socketio = io(server);
+      socketio.on('connection', socket => {
 
-          // client info
-          console.log(`new userID: ${socket.id}`);
+        // client info
+        console.log(`Client (ID: ${socket.id}) is connected.`);
 
-          //connection emit
-          socket.emit('hello', `Welcome!!!`);
+        //connection emit
+        socket.emit('hello', `Welcome!!!`);
 
-          //Events
-          socket.on('messageLine', ({messageLine, userName, hash}) => {
+        //Events
+        socket.on('messageLine', ({messageLine, userName, hash}) => {
 
-            if (messageLine.length > 0 && messageLine[0] === '/') {
-              const commandLine = messageLine.slice(1)
-              const args = commandLine.split(' ');
-              const [ command, ...rest ] = args;
+          let serverMessage;
 
-              var name = rest[0];
-              var password = rest[1];
+          if (messageLine.length > 0 && messageLine[0] === '/') {
+            const commandLine = messageLine.slice(1)
+            const args = commandLine.split(' ');
+            const [ command, ...rest ] = args;
 
-              switch (command) {
-                case 'register':
-                  const reg = this.registerUser(name, password);
+            var name = rest[0];
+            var password = rest[1];
 
-                  let registerResult;
-                  if (reg) {
-                    registerResult = `${name} is registered!`;
-                  } else {
-                    registerResult = `${name} user exist!`;
-                  }
-                  socket.emit('registerResult', registerResult);
-                break;
+            let commandResultMessage;
 
-                case 'login':
-                  hash = this.loginUser(name, password);
+
+            switch (command) {
+              case 'register':
+                const reg = this.registerUser(name, password);
+                if (reg) {
+                  commandResultMessage = `${name} is registered!`;
+                } else {
+                  commandResultMessage = `${name} user exist!`;
+                }
+
+              break;
+
+              case 'login':
+                hash = this.loginUser(name, password);
+                if (hash) {
                   socket.emit('logedin', {
                     name: name,
                     hash: hash,
                   });
+                  commandResultMessage = `You are logged in`;
+                  serverMessage = `${name} is logged in`;
 
-                  if (hash) {
-                    socket.broadcast.emit('message', {
-                      userName: name,
-                      messageLine: `is logged in`,
-                     });
-                  }
-                  break;
+                } else {
+                  commandResultMessage = `ERROR: '${name}' is not logged in!!! You should register user.`;
+                }
+                break;
 
-                  case 'logout' :
+                case 'logout' :
+                  if (this.isUserLogged(hash)) {
                     this.logOut(hash);
-                    socket.emit('logoutResult', 'You are logged out');
-                  break;
-                default:
-              }
+                    commandResultMessage = `You are logged out!`;
+                  } else {
+                    commandResultMessage = `ERROR: you were not logged in!!!`;
+                  }
+                  serverMessage = `${userName} is logged out!`;
+                break;
+              default:
+                commandResultMessage = `command not exist`;
             }
 
-            if (this.isUserExists(hash)) {
-              socket.broadcast.emit('message', {userName, messageLine});
-            }
-          });
+            socket.emit('commandResultMessage', commandResultMessage);
+          }
+          if (serverMessage) {
+            console.log(serverMessage);
+            return socket.broadcast.emit('serverMessage', serverMessage);
+          }
+
+          if (this.isUserLogged(hash)) {
+            socket.broadcast.emit('message', {userName, messageLine});
+          }
+
         });
+      });
     }).catch((error) => {
         console.log('error: ', error);
     });
+  }
+
+  createToken() {
+    return uuidV1()
   }
 
   loginUser(name, password) {
     for (const user of this.users) {
        if (user.name === name && user.password === password) {
          if (user.hash === null) {
-           const hash = uuidV1();
-           user.hash = hash;
+           user.hash = this.createToken();
          }
          return user.hash;
        }
@@ -116,8 +147,14 @@ class ChatServer {
     return true;
   }
 
-  isUserExists(hash) {
+  isUserExists(name) {
     return this.users.some( u => {
+      return (name && u.name === name);
+    });
+  }
+
+  isUserLogged(hash) {
+    return hash && this.users.some( u => {
       return (hash && u.hash === hash);
     });
   }

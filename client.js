@@ -14,12 +14,12 @@ socket.on('message', ({userName, messageLine}) => {
   writeLine(usrMsg);
 });
 
-socket.on('registerResult', msg => {
-  writeLine(msg);
+socket.on('commandResultMessage', message => {
+  writeLine(message);
 });
 
-socket.on('logoutResult', msg => {
-  writeLine(msg);
+socket.on('serverMessage', message => {
+  writeLine(message);
 });
 
 socket.on('logedin', ({name, hash}) => {
