@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "server": "node src/server.js",
+    "start": "npm run server",
+    "client": "node src/client.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
